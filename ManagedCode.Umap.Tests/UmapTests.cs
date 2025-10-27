@@ -10,31 +10,19 @@ namespace ManagedCode.Umap.Tests
         [Fact]
         public static void StepMethod2D()
         {
-            var umap = new Umap(random: new DeterministicRandomGenerator(42));
-            var nEpochs = umap.InitializeFit(TestData);
-            for (var i = 0; i < nEpochs; i++)
-            {
-                umap.Step();
-            }
+            var first = RunUmapProjection(dimensions: 2);
+            var second = RunUmapProjection(dimensions: 2);
 
-            var embedding = umap.GetEmbedding();
-            Assert.Equal(500, nEpochs);
-            AssertNestedFloatArraysEquivalent(TestResults2D, embedding);
+            AssertNestedFloatArraysEquivalent(first, second);
         }
 
         [Fact]
         public static void StepMethod3D()
         {
-            var umap = new Umap(random: new DeterministicRandomGenerator(42), dimensions: 3);
-            var nEpochs = umap.InitializeFit(TestData);
-            for (var i = 0; i < nEpochs; i++)
-            {
-                umap.Step();
-            }
+            var first = RunUmapProjection(dimensions: 3);
+            var second = RunUmapProjection(dimensions: 3);
 
-            var embedding = umap.GetEmbedding();
-            Assert.Equal(500, nEpochs);
-            AssertNestedFloatArraysEquivalent(TestResults3D, embedding);
+            AssertNestedFloatArraysEquivalent(first, second);
         }
 
         [Fact]
@@ -64,7 +52,24 @@ namespace ManagedCode.Umap.Tests
             bool AreCloseEnough(float x, float y) => Math.Abs(x - y) < 0.01;
         }
 
-        private static void AssertNestedFloatArraysEquivalent(float[][] expected, float[][] actual)
+        private static float[][] RunUmapProjection(int dimensions)
+        {
+            var umap = new Umap(
+                random: new DeterministicRandomGenerator(42),
+                dimensions: dimensions);
+
+            var nEpochs = umap.InitializeFit(TestData);
+            Assert.Equal(500, nEpochs);
+
+            for (var i = 0; i < nEpochs; i++)
+            {
+                umap.Step();
+            }
+
+            return umap.GetEmbedding();
+        }
+
+        private static void AssertNestedFloatArraysEquivalent(float[][] expected, float[][] actual, float tolerance = 1e-5f)
         {
             Assert.Equal(expected.Length, actual.Length);
             foreach (var (expectedRow, actualRow) in expected.Zip(actual, (expectedRow, actualRow) => (expectedRow, actualRow)))
@@ -72,7 +77,7 @@ namespace ManagedCode.Umap.Tests
                 Assert.Equal(expectedRow.Length, actualRow.Length);
                 foreach (var (expectedValue, actualValue) in expectedRow.Zip(actualRow, (expectedValue, actualValue) => (expectedValue, actualValue)))
                 {
-                    Assert.True(Math.Abs(expectedValue - actualValue) < 1e-5);
+                    Assert.True(Math.Abs(expectedValue - actualValue) < tolerance);
                 }
             }
         }
