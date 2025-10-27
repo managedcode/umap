@@ -158,8 +158,8 @@ namespace ManagedCode.Umap
         {
             var metricNNDescent = NNDescent<T>.MakeNNDescent(_distanceFn, _random);
             progressReporter(0.05f);
-            var nTrees = 5 + Round(Math.Sqrt(x.Length) / 20);
-            var nIters = Math.Max(5, (int)Math.Floor(Math.Round(Math.Log(x.Length, 2))));
+            var nTrees = 5 + Round(MathF.Sqrt(x.Length) / 20f);
+            var nIters = Math.Max(5, (int)Math.Floor(Math.Round(Math.Log2(x.Length))));
             progressReporter(0.1f);
             var leafSize = Math.Max(10, _nNeighbors);
             var forestProgressReporter = ScaleProgressReporter(progressReporter, 0.1f, 0.4f);
@@ -211,7 +211,7 @@ namespace ManagedCode.Umap
 
         private static (float[] sigmas, float[] rhos) SmoothKNNDistance(float[][] distances, int k, float localConnectivity = 1, int nIter = 64, float bandwidth = 1)
         {
-            var target = Math.Log(k, 2) * bandwidth; // TODO: Use Math.Log2 (when update framework to a version that supports it) or consider a pre-computed table
+            var target = MathF.Log2(k) * bandwidth;
             var rho = new float[distances.Length];
             var result = new float[distances.Length];
             var rowMeans = new float[distances.Length];
@@ -268,7 +268,7 @@ namespace ManagedCode.Umap
 
                 for (var n = 0; n < nIter; n++)
                 {
-                    var psum = 0.0;
+                    var psum = 0f;
                     var row = ithDistances;
                     var rhoValue = rho[i];
                     for (var j = 1; j < row.Length; j++)
@@ -276,14 +276,14 @@ namespace ManagedCode.Umap
                         var d = row[j] - rhoValue;
                         if (d > 0)
                         {
-                            psum += Math.Exp(-(d / mid));
+                            psum += MathF.Exp(-(d / mid));
                         }
                         else
                         {
-                            psum += 1.0;
+                            psum += 1.0f;
                         }
                     }
-                    if (Math.Abs(psum - target) < SMOOTH_K_TOLERANCE)
+                    if (MathF.Abs(psum - target) < SMOOTH_K_TOLERANCE)
                     {
                         break;
                     }
@@ -393,7 +393,7 @@ namespace ManagedCode.Umap
             // We're not computing the spectral initialization in this implementation until we determine a better eigenvalue/eigenvector computation approach
 
             _embedding = new float[graph.Dims.rows * _optimizationState.Dim];
-            SIMDint<T>.Uniform(ref _embedding, 10, _random);
+            SimdRandom.Uniform(_embedding, 10, _random);
 
             // Get graph data in ordered way...
             var weights = new List<float>();
@@ -644,14 +644,7 @@ namespace ManagedCode.Umap
         /// </summary>
         private static float RDist(Span<float> x, Span<float> y)
         {
-            //return Mosaik.Core.SIMD.Euclidean(ref x, ref y);
-            var distSquared = 0f;
-            for (var i = 0; i < x.Length; i++)
-            {
-                var d = x[i] - y[i];
-                distSquared += d * d;
-            }
-            return distSquared;
+            return Simd.Euclidean(x, y);
         }
 
         /// <summary>
@@ -688,23 +681,24 @@ namespace ManagedCode.Umap
         {
             public static float Cosine(T lhs, T rhs)
             {
-                var lhsVal = lhs.Data;
-                var rhsVal = rhs.Data;
-                return 1 - (SIMD<T>.DotProduct(ref lhsVal, ref rhsVal) / (SIMD<T>.Magnitude(ref lhsVal) * SIMD<T>.Magnitude(ref rhsVal)));
+                var lhsSpan = lhs.Data.AsSpan();
+                var rhsSpan = rhs.Data.AsSpan();
+                var denominator = Simd.Magnitude(lhsSpan) * Simd.Magnitude(rhsSpan);
+                return 1 - (Simd.DotProduct(lhsSpan, rhsSpan) / denominator);
             }
 
             public static float CosineForNormalizedVectors(T lhs, T rhs)
             {
-                var lhsVal = lhs.Data;
-                var rhsVal = rhs.Data;
-                return 1 - SIMD<T>.DotProduct(ref lhsVal, ref rhsVal);
+                var lhsSpan = lhs.Data.AsSpan();
+                var rhsSpan = rhs.Data.AsSpan();
+                return 1 - Simd.DotProduct(lhsSpan, rhsSpan);
             }
 
             public static float Euclidean(T lhs, T rhs)
             {
-                var lhsVal = lhs.Data;
-                var rhsVal = rhs.Data;
-                return (float)Math.Sqrt(SIMD<T>.Euclidean(ref lhsVal, ref rhsVal)); // TODO: Replace with netcore3 MathF class when the framework is available
+                var lhsSpan = lhs.Data.AsSpan();
+                var rhsSpan = rhs.Data.AsSpan();
+                return MathF.Sqrt(Simd.Euclidean(lhsSpan, rhsSpan));
             }
         }
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace ManagedCode.Umap
 {
@@ -27,7 +28,8 @@ namespace ManagedCode.Umap
                 var row = rows[i];
                 var col = cols[i];
                 CheckDims(row, col);
-                _entries[new RowCol(row, col)] = values[i];
+                ref float slot = ref CollectionsMarshal.GetValueRefOrAddDefault(_entries, new RowCol(row, col), out _);
+                slot = values[i];
             }
         }
 
@@ -60,7 +62,8 @@ namespace ManagedCode.Umap
         public void Set(int row, int col, float value)
         {
             CheckDims(row, col);
-            _entries[new RowCol(row, col)] = value;
+            ref float slot = ref CollectionsMarshal.GetValueRefOrAddDefault(_entries, new RowCol(row, col), out _);
+            slot = value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -94,7 +97,12 @@ namespace ManagedCode.Umap
 
         public SparseMatrix Map(Func<float, int, int, float> fn)
         {
-            var newEntries = _entries.ToDictionary(kv => kv.Key, kv => fn(kv.Value, kv.Key.Row, kv.Key.Col));
+            var newEntries = new Dictionary<RowCol, float>(_entries.Count);
+            foreach (var kv in _entries)
+            {
+                ref float slot = ref CollectionsMarshal.GetValueRefOrAddDefault(newEntries, kv.Key, out _);
+                slot = fn(kv.Value, kv.Key.Row, kv.Key.Col);
+            }
             return new SparseMatrix(newEntries, Dims);
         }
 
@@ -137,13 +145,16 @@ namespace ManagedCode.Umap
         /// </summary>
         public SparseMatrix PairwiseMultiply(SparseMatrix other)
         {
-            var newEntries = new Dictionary<RowCol, float>(_entries.Count);
+            var newEntries = new Dictionary<RowCol, float>(Math.Max(_entries.Count, other._entries.Count));
             foreach (var kv in _entries)
             {
-                if (other._entries.TryGetValue(kv.Key, out var v))
+                if (!other._entries.TryGetValue(kv.Key, out var v))
                 {
-                    newEntries[kv.Key] = kv.Value * v;
+                    continue;
                 }
+
+                ref float slot = ref CollectionsMarshal.GetValueRefOrAddDefault(newEntries, kv.Key, out _);
+                slot = kv.Value * v;
             }
             return new SparseMatrix(newEntries, Dims);
         }
@@ -168,13 +179,24 @@ namespace ManagedCode.Umap
         /// </summary>
         private SparseMatrix ElementWiseWith(SparseMatrix other, Func<float, float, float> op)
         {
-            var newEntries = new Dictionary<RowCol, float>(_entries.Count);
-            foreach (var k in _entries.Keys.Union(other._entries.Keys))
+            var newEntries = new Dictionary<RowCol, float>(_entries.Count + other._entries.Count);
+            foreach (var kv in _entries)
             {
-                newEntries[k] = op(
-                    _entries.TryGetValue(k, out var x) ? x : 0f,
-                    other._entries.TryGetValue(k, out var y) ? y : 0f
-                );
+                var key = kv.Key;
+                other._entries.TryGetValue(key, out var otherValue);
+                ref float slot = ref CollectionsMarshal.GetValueRefOrAddDefault(newEntries, key, out _);
+                slot = op(kv.Value, otherValue);
+            }
+
+            foreach (var kv in other._entries)
+            {
+                ref float slot = ref CollectionsMarshal.GetValueRefOrAddDefault(newEntries, kv.Key, out var exists);
+                if (exists)
+                {
+                    continue;
+                }
+
+                slot = op(0f, kv.Value);
             }
             return new SparseMatrix(newEntries, Dims);
         }

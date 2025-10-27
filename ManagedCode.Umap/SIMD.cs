@@ -1,235 +1,180 @@
 ﻿using System;
-using System.Linq;
-using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
-namespace ManagedCode.Umap
+namespace ManagedCode.Umap;
+
+internal static class Simd
 {
-    internal static class SIMD<T>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Magnitude(ReadOnlySpan<float> values) => MathF.Sqrt(DotProduct(values, values));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Euclidean(ReadOnlySpan<float> lhs, ReadOnlySpan<float> rhs)
     {
-        private static readonly int _vs1 = Vector<float>.Count;
-        private static readonly int _vs2 = 2 * Vector<float>.Count;
-        private static readonly int _vs3 = 3 * Vector<float>.Count;
-        private static readonly int _vs4 = 4 * Vector<float>.Count;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float Magnitude(ref float[] vec) => (float)Math.Sqrt(DotProduct(ref vec, ref vec));
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float Euclidean(ref float[] lhs, ref float[] rhs)
+        if (lhs.Length != rhs.Length)
         {
-            float result = 0f;
-
-            var count = lhs.Length;
-            var offset = 0;
-            Vector<float> diff;
-            while (count >= _vs4)
-            {
-                diff = new Vector<float>(lhs, offset) - new Vector<float>(rhs, offset); result += Vector.Dot(diff, diff);
-                diff = new Vector<float>(lhs, offset + _vs1) - new Vector<float>(rhs, offset + _vs1); result += Vector.Dot(diff, diff);
-                diff = new Vector<float>(lhs, offset + _vs2) - new Vector<float>(rhs, offset + _vs2); result += Vector.Dot(diff, diff);
-                diff = new Vector<float>(lhs, offset + _vs3) - new Vector<float>(rhs, offset + _vs3); result += Vector.Dot(diff, diff);
-                if (count == _vs4)
-                {
-                    return result;
-                }
-
-                count -= _vs4;
-                offset += _vs4;
-            }
-
-            if (count >= _vs2)
-            {
-                diff = new Vector<float>(lhs, offset) - new Vector<float>(rhs, offset); result += Vector.Dot(diff, diff);
-                diff = new Vector<float>(lhs, offset + _vs1) - new Vector<float>(rhs, offset + _vs1); result += Vector.Dot(diff, diff);
-                if (count == _vs2)
-                {
-                    return result;
-                }
-
-                count -= _vs2;
-                offset += _vs2;
-            }
-            if (count >= _vs1)
-            {
-                diff = new Vector<float>(lhs, offset) - new Vector<float>(rhs, offset); result += Vector.Dot(diff, diff);
-                if (count == _vs1)
-                {
-                    return result;
-                }
-
-                count -= _vs1;
-                offset += _vs1;
-            }
-            if (count > 0)
-            {
-                while (count > 0)
-                {
-                    var d = (lhs[offset] - rhs[offset]);
-                    result += d * d;
-                    offset++; count--;
-                }
-            }
-            return result;
+            ThrowLengthMismatch();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Add(ref float[] lhs, float f)
+        ref float left = ref MemoryMarshal.GetReference(lhs);
+        ref float right = ref MemoryMarshal.GetReference(rhs);
+
+        int length = lhs.Length;
+        int i = 0;
+        float sum = 0f;
+
+        if (Vector256.IsHardwareAccelerated && length >= Vector256<float>.Count)
         {
-            var count = lhs.Length;
-            var offset = 0;
-            var v = new Vector<float>(f);
-            while (count >= _vs4)
+            Vector256<float> acc = Vector256<float>.Zero;
+            for (; i <= length - Vector256<float>.Count; i += Vector256<float>.Count)
             {
-                (new Vector<float>(lhs, offset) + v).CopyTo(lhs, offset);
-                (new Vector<float>(lhs, offset + _vs1) + v).CopyTo(lhs, offset + _vs1);
-                (new Vector<float>(lhs, offset + _vs2) + v).CopyTo(lhs, offset + _vs2);
-                (new Vector<float>(lhs, offset + _vs3) + v).CopyTo(lhs, offset + _vs3);
-                if (count == _vs4)
-                {
-                    return;
-                }
-
-                count -= _vs4;
-                offset += _vs4;
+                var diff = Vector256.LoadUnsafe(ref left, (uint)i) - Vector256.LoadUnsafe(ref right, (uint)i);
+                acc += diff * diff;
             }
-            if (count >= _vs2)
-            {
-                (new Vector<float>(lhs, offset) + v).CopyTo(lhs, offset);
-                (new Vector<float>(lhs, offset + _vs1) + v).CopyTo(lhs, offset + _vs1);
-                if (count == _vs2)
-                {
-                    return;
-                }
+            sum += Vector256.Sum(acc);
+        }
 
-                count -= _vs2;
-                offset += _vs2;
-            }
-            if (count >= _vs1)
+        if (Vector128.IsHardwareAccelerated && i <= length - Vector128<float>.Count)
+        {
+            Vector128<float> acc = Vector128<float>.Zero;
+            for (; i <= length - Vector128<float>.Count; i += Vector128<float>.Count)
             {
-                (new Vector<float>(lhs, offset) + v).CopyTo(lhs, offset);
-                if (count == _vs1)
-                {
-                    return;
-                }
+                var diff = Vector128.LoadUnsafe(ref left, (uint)i) - Vector128.LoadUnsafe(ref right, (uint)i);
+                acc += diff * diff;
+            }
+            sum += Vector128.Sum(acc);
+        }
 
-                count -= _vs1;
-                offset += _vs1;
-            }
-            if (count > 0)
+        for (; i < length; i++)
+        {
+            float diff = Unsafe.Add(ref left, i) - Unsafe.Add(ref right, i);
+            sum += diff * diff;
+        }
+
+        return sum;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float DotProduct(ReadOnlySpan<float> lhs, ReadOnlySpan<float> rhs)
+    {
+        if (lhs.Length != rhs.Length)
+        {
+            ThrowLengthMismatch();
+        }
+
+        ref float left = ref MemoryMarshal.GetReference(lhs);
+        ref float right = ref MemoryMarshal.GetReference(rhs);
+
+        int length = lhs.Length;
+        int i = 0;
+        float sum = 0f;
+
+        if (Vector256.IsHardwareAccelerated && length >= Vector256<float>.Count)
+        {
+            Vector256<float> acc = Vector256<float>.Zero;
+            for (; i <= length - Vector256<float>.Count; i += Vector256<float>.Count)
             {
-                while (count > 0)
-                {
-                    lhs[offset] += f;
-                    offset++; count--;
-                }
+                acc += Vector256.LoadUnsafe(ref left, (uint)i) * Vector256.LoadUnsafe(ref right, (uint)i);
+            }
+            sum += Vector256.Sum(acc);
+        }
+
+        if (Vector128.IsHardwareAccelerated && i <= length - Vector128<float>.Count)
+        {
+            Vector128<float> acc = Vector128<float>.Zero;
+            for (; i <= length - Vector128<float>.Count; i += Vector128<float>.Count)
+            {
+                acc += Vector128.LoadUnsafe(ref left, (uint)i) * Vector128.LoadUnsafe(ref right, (uint)i);
+            }
+            sum += Vector128.Sum(acc);
+        }
+
+        for (; i < length; i++)
+        {
+            sum += Unsafe.Add(ref left, i) * Unsafe.Add(ref right, i);
+        }
+
+        return sum;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Add(Span<float> values, float scalar)
+    {
+        if (values.Length == 0)
+        {
+            return;
+        }
+
+        ref float start = ref MemoryMarshal.GetReference(values);
+        int length = values.Length;
+        int i = 0;
+
+        if (Vector256.IsHardwareAccelerated && length >= Vector256<float>.Count)
+        {
+            Vector256<float> scalarVec = Vector256.Create(scalar);
+            for (; i <= length - Vector256<float>.Count; i += Vector256<float>.Count)
+            {
+                var current = Vector256.LoadUnsafe(ref start, (uint)i);
+                (current + scalarVec).StoreUnsafe(ref start, (uint)i);
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Multiply(ref float[] lhs, float f)
+        if (Vector128.IsHardwareAccelerated && i <= length - Vector128<float>.Count)
         {
-            var count = lhs.Length;
-            var offset = 0;
-            while (count >= _vs4)
+            Vector128<float> scalarVec = Vector128.Create(scalar);
+            for (; i <= length - Vector128<float>.Count; i += Vector128<float>.Count)
             {
-                (new Vector<float>(lhs, offset) * f).CopyTo(lhs, offset);
-                (new Vector<float>(lhs, offset + _vs1) * f).CopyTo(lhs, offset + _vs1);
-                (new Vector<float>(lhs, offset + _vs2) * f).CopyTo(lhs, offset + _vs2);
-                (new Vector<float>(lhs, offset + _vs3) * f).CopyTo(lhs, offset + _vs3);
-                if (count == _vs4)
-                {
-                    return;
-                }
-
-                count -= _vs4;
-                offset += _vs4;
-            }
-            if (count >= _vs2)
-            {
-                (new Vector<float>(lhs, offset) * f).CopyTo(lhs, offset);
-                (new Vector<float>(lhs, offset + _vs1) * f).CopyTo(lhs, offset + _vs1);
-                if (count == _vs2)
-                {
-                    return;
-                }
-
-                count -= _vs2;
-                offset += _vs2;
-            }
-            if (count >= _vs1)
-            {
-                (new Vector<float>(lhs, offset) * f).CopyTo(lhs, offset);
-                if (count == _vs1)
-                {
-                    return;
-                }
-
-                count -= _vs1;
-                offset += _vs1;
-            }
-            if (count > 0)
-            {
-                while (count > 0)
-                {
-                    lhs[offset] *= f;
-                    offset++; count--;
-                }
+                var current = Vector128.LoadUnsafe(ref start, (uint)i);
+                (current + scalarVec).StoreUnsafe(ref start, (uint)i);
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float DotProduct(ref float[] lhs, ref float[] rhs)
+        for (; i < length; i++)
         {
-            var result = 0f;
-            var count = lhs.Length;
-            var offset = 0;
-            while (count >= _vs4)
-            {
-                result += Vector.Dot(new Vector<float>(lhs, offset), new Vector<float>(rhs, offset));
-                result += Vector.Dot(new Vector<float>(lhs, offset + _vs1), new Vector<float>(rhs, offset + _vs1));
-                result += Vector.Dot(new Vector<float>(lhs, offset + _vs2), new Vector<float>(rhs, offset + _vs2));
-                result += Vector.Dot(new Vector<float>(lhs, offset + _vs3), new Vector<float>(rhs, offset + _vs3));
-                if (count == _vs4)
-                {
-                    return result;
-                }
-
-                count -= _vs4;
-                offset += _vs4;
-            }
-            if (count >= _vs2)
-            {
-                result += Vector.Dot(new Vector<float>(lhs, offset), new Vector<float>(rhs, offset));
-                result += Vector.Dot(new Vector<float>(lhs, offset + _vs1), new Vector<float>(rhs, offset + _vs1));
-                if (count == _vs2)
-                {
-                    return result;
-                }
-
-                count -= _vs2;
-                offset += _vs2;
-            }
-            if (count >= _vs1)
-            {
-                result += Vector.Dot(new Vector<float>(lhs, offset), new Vector<float>(rhs, offset));
-                if (count == _vs1)
-                {
-                    return result;
-                }
-
-                count -= _vs1;
-                offset += _vs1;
-            }
-            if (count > 0)
-            {
-                while (count > 0)
-                {
-                    result += lhs[offset] * rhs[offset];
-                    offset++; count--;
-                }
-            }
-            return result;
+            Unsafe.Add(ref start, i) += scalar;
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Multiply(Span<float> values, float scalar)
+    {
+        if (values.Length == 0)
+        {
+            return;
+        }
+
+        ref float start = ref MemoryMarshal.GetReference(values);
+        int length = values.Length;
+        int i = 0;
+
+        if (Vector256.IsHardwareAccelerated && length >= Vector256<float>.Count)
+        {
+            Vector256<float> scalarVec = Vector256.Create(scalar);
+            for (; i <= length - Vector256<float>.Count; i += Vector256<float>.Count)
+            {
+                var current = Vector256.LoadUnsafe(ref start, (uint)i);
+                (current * scalarVec).StoreUnsafe(ref start, (uint)i);
+            }
+        }
+
+        if (Vector128.IsHardwareAccelerated && i <= length - Vector128<float>.Count)
+        {
+            Vector128<float> scalarVec = Vector128.Create(scalar);
+            for (; i <= length - Vector128<float>.Count; i += Vector128<float>.Count)
+            {
+                var current = Vector128.LoadUnsafe(ref start, (uint)i);
+                (current * scalarVec).StoreUnsafe(ref start, (uint)i);
+            }
+        }
+
+        for (; i < length; i++)
+        {
+            Unsafe.Add(ref start, i) *= scalar;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowLengthMismatch() => throw new ArgumentException("Vectors must have the same length.");
 }
