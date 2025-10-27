@@ -356,7 +356,7 @@ namespace ManagedCode.Umap
                     }
                     else
                     {
-                        val = (float)Math.Exp(-((knnDistances[i][j] - rhos[i]) / sigmas[i]));
+                        val = MathF.Exp(-((knnDistances[i][j] - rhos[i]) / sigmas[i]));
                     }
 
                     rows[i * nNeighbors + j] = i;
