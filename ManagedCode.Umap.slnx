@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ManagedCode.Umap/ManagedCode.Umap.csproj" />
+  <Project Path="ManagedCode.Umap.Tests/ManagedCode.Umap.Tests.csproj" />
+  <Project Path="ManagedCode.Umap.Sample/ManagedCode.Umap.Sample.csproj" />
+</Solution>
