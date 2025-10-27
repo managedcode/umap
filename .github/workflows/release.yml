@@ -39,7 +39,7 @@ jobs:
       run: dotnet build ManagedCode.Umap.slnx --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test ManagedCode.Umap.slnx --configuration Release --no-build --verbosity normal
+      run: dotnet test ManagedCode.Umap.slnx --configuration Release --verbosity normal
 
     - name: Pack NuGet packages
       run: dotnet pack ManagedCode.Umap/ManagedCode.Umap.csproj --configuration Release --no-build --output ./artifacts
