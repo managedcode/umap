@@ -20,8 +20,8 @@
     <Company>ManagedCode SAS</Company>
     <Product>Managed Code - Umap</Product>
     <PackageId>ManagedCode.Umap</PackageId>
-    <PackageVersion>1.0.0</PackageVersion>
-    <Version>1.0.0</Version>
+    <PackageVersion>0.0.1</PackageVersion>
+    <Version>0.0.1</Version>
     <RepositoryType>Github</RepositoryType>
     <RepositoryUrl>https://github.com/managedcode/umap</RepositoryUrl>
     <PackageProjectUrl>https://github.com/managedcode/umap</PackageProjectUrl>

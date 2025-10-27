@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>ManagedCode.Umap</AssemblyName>
     <RootNamespace>ManagedCode.Umap</RootNamespace>
-    <Description>High-performance ManagedCode implementation of Uniform Manifold Approximation and Projection (UMAP) for .NET.</Description>
+    <Description>High-performance implementation of Uniform Manifold Approximation and Projection (UMAP) for .NET.</Description>
     <PackageTags>umap;embedding;dimensionality reduction;managedcode;ml</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>

@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <AssemblyName>ManagedCode.Umap.Tests</AssemblyName>
-    <RootNamespace>ManagedCode.Umap.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
