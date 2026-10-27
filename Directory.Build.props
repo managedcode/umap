@@ -42,7 +42,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'ManagedCode.Umap'">
-    <PackageReference Update="DotNet.ReproducibleBuilds" Version="1.2.25">
+    <PackageReference Update="DotNet.ReproducibleBuilds" Version="1.2.39">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
